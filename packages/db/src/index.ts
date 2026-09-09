@@ -1,31 +1,38 @@
-import { Client } from "pg";
-import { config } from "dotenv";
+import { db, pool } from "./client.js";
+import { users } from "./schema.js";
 
-config({
-  path: new URL("../../../.env", import.meta.url),
-});
-
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is not defined");
-}
-
-const client = new Client({
-  connectionString: databaseUrl,
-});
+import { eq } from "drizzle-orm";
 
 async function main() {
-  await client.connect();
+  const [user] = await db
+    .insert(users)
+    .values({
+      name: "Gurdev",
+    })
+    .returning();
 
-  const result = await client.query("SELECT 1 AS result");
+  console.log("Created:", user);
 
-  console.log(result.rows);
+  const [updatedUser] = await db
+    .update(users)
+    .set({
+      name: "Gurdev Singh",
+    })
+    .where(eq(users.id, user.id))
+    .returning();
 
-  await client.end();
+  console.log("Updated:", updatedUser);
+
+  // delete user
+  await db.delete(users).where(eq(users.id, user.id));
+
+  console.log(await db.select().from(users).where(eq(users.id, user.id)));
+
+  await pool.end();
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error(error);
+  await pool.end();
   process.exit(1);
 });
