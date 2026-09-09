@@ -1,0 +1,8 @@
+{
+  "name": "video-assistant-ai",
+  "private": true,
+  "packageManager": "pnpm@12.3.4",
+  "devDependencies": {
+    "turbo": "^2.10.12"
+  }
+}
