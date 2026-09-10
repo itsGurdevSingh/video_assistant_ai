@@ -1,0 +1,2 @@
+ALTER TABLE "transcript_segments" ADD CONSTRAINT "transcript_segments_time_check" CHECK ("transcript_segments"."start_seconds" < "transcript_segments"."end_seconds");--> statement-breakpoint
+ALTER TABLE "transcript_segments" ADD CONSTRAINT "transcript_segments_index_check" CHECK ("transcript_segments"."segment_index" >= 0);
