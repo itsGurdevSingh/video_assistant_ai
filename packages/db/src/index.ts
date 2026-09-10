@@ -36,3 +36,7 @@ main().catch(async (error) => {
   await pool.end();
   process.exit(1);
 });
+
+
+export { db, pool } from "./client.js";
+export * from "./schema.js";
