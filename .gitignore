@@ -10,3 +10,9 @@ dist/
 .turbo/
 
 *.log
+
+# Local media processing artifacts
+packages/media/tmp/
+
+# Whisper models
+docker/whisper/models/*.bin
