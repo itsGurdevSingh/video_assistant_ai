@@ -118,6 +118,9 @@ importers:
       '@video-assistant/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@video-assistant/media':
+        specifier: workspace:*
+        version: link:../../packages/media
       fastify:
         specifier: ^5.12.3
         version: 5.12.3

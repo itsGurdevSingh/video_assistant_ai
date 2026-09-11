@@ -60,10 +60,6 @@ export class WhisperCppProvider {
 
     const raw = await response.json();
 
-    console.dir(raw, {
-      depth: null,
-    });
-
     return parseWhisperResponse(raw);
   }
 }
