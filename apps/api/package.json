@@ -11,6 +11,7 @@
   "dependencies": {
     "@video-assistant/db": "workspace:*",
     "@video-assistant/media": "workspace:*",
+    "@video-assistant/ai": "workspace:*",
     "fastify": "^5.12.3",
     "zod": "^4.5.4"
   },

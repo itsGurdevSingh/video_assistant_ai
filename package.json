@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@12.3.4",
   "devDependencies": {
+    "tsx": "^4.23.13",
     "turbo": "^2.10.12"
   }
 }
