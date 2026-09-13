@@ -11,3 +11,4 @@ export * from "./schema.js";
 export * from "./repositories/video.repository.js"; 
 export * from "./repositories/transcript.repository.js";
 export * from "./repositories/user.repository.js";
+export * from "./repositories/transcript-embedding.repository.js";

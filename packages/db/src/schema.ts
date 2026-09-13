@@ -8,6 +8,7 @@ import {
   real,
   uniqueIndex,
   uuid,
+  vector
 } from "drizzle-orm/pg-core";
 
 import { sql } from "drizzle-orm";
@@ -140,4 +141,45 @@ export const transcriptSegments = pgTable(
     ),
     check("transcript_segments_index_check", sql`${table.segmentIndex} >= 0`),
   ],
+);
+
+
+export const transcriptEmbeddings = pgTable(
+  "transcript_embeddings",
+  {
+    id: uuid("id")
+      .defaultRandom()
+      .primaryKey(),
+
+    transcriptId: uuid("transcript_id")
+      .notNull()
+      .references(() => transcripts.id, {
+        onDelete: "cascade",
+      }),
+
+    chunkIndex: integer("chunk_index")
+      .notNull(),
+
+    text: text("text")
+      .notNull(),
+
+    embedding: vector("embedding", {
+      dimensions: 384,
+    }).notNull(),
+
+    startSeconds: real("start_seconds")
+      .notNull(),
+
+    endSeconds: real("end_seconds")
+      .notNull(),
+
+    embeddingModel: text("embedding_model")
+      .notNull(),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+  },
 );
