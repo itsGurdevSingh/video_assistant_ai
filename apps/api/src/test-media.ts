@@ -6,6 +6,7 @@ import {
   createUserRepository,
   createVideoRepository,
   createTranscriptRepository,
+  createTranscriptEmbeddingRepository,
 } from "@video-assistant/db";
 
 import {
@@ -15,10 +16,18 @@ import {
   WhisperCppProvider,
 } from "@video-assistant/media";
 
+import {
+  TeiEmbeddingProvider,
+  chunkTranscript,
+} from "@video-assistant/ai";
+
 import { createTranscriptionService } from "./services/transcription.service.js";
+import { createEmbeddingService } from "./services/embedding.service.js";
 
 const youtubeUrl = process.argv.find(
-  (arg) => arg.startsWith("https://") || arg.startsWith("http://"),
+  (arg) =>
+    arg.startsWith("https://") ||
+    arg.startsWith("http://"),
 );
 
 if (!youtubeUrl) {
@@ -54,7 +63,7 @@ try {
   // 1. Prepare directories
   // --------------------------------------------------
 
-  console.log("[1/8] Preparing directories...");
+  console.log("[1/9] Preparing directories...");
 
   await mkdir(videoDir, { recursive: true });
   await mkdir(audioDir, { recursive: true });
@@ -64,9 +73,10 @@ try {
   // 2. Create test user
   // --------------------------------------------------
 
-  console.log("[2/8] Creating test user...");
+  console.log("[2/9] Creating test user...");
 
-  const userRepository = createUserRepository(db);
+  const userRepository =
+    createUserRepository(db);
 
   const user = await userRepository.create({
     name: "Media Integration Test User",
@@ -80,20 +90,22 @@ try {
   // 3. Download YouTube video
   // --------------------------------------------------
 
-  console.log("[3/8] Downloading YouTube video...");
+  console.log("[3/9] Downloading YouTube video...");
 
   await downloadYouTubeVideo(
     youtubeUrl,
     videoPath,
   );
 
-  console.log(`Video saved: ${videoPath}\n`);
+  console.log(
+    `Video saved: ${videoPath}\n`,
+  );
 
   // --------------------------------------------------
   // 4. Create video record
   // --------------------------------------------------
 
-  console.log("[4/8] Creating video record...");
+  console.log("[4/9] Creating video record...");
 
   const videoRepository =
     createVideoRepository(db);
@@ -111,14 +123,16 @@ try {
   // 5. Extract + chunk audio
   // --------------------------------------------------
 
-  console.log("[5/8] Extracting audio...");
+  console.log("[5/9] Extracting audio...");
 
   await extractAudio(
     videoPath,
     audioPath,
   );
 
-  console.log(`Audio saved: ${audioPath}\n`);
+  console.log(
+    `Audio saved: ${audioPath}\n`,
+  );
 
   console.log("Chunking audio...");
 
@@ -149,12 +163,13 @@ try {
   // --------------------------------------------------
 
   console.log(
-    "[6/8] Transcribing and persisting transcript...\n",
+    "[6/9] Transcribing and persisting transcript...\n",
   );
 
-  const whisper = new WhisperCppProvider({
-    baseUrl: "http://localhost:8080",
-  });
+  const whisper =
+    new WhisperCppProvider({
+      baseUrl: "http://localhost:8080",
+    });
 
   const transcriptionService =
     createTranscriptionService(
@@ -179,11 +194,84 @@ try {
   );
 
   // --------------------------------------------------
-  // 7. Read back from PostgreSQL
+  // 7. Create RAG chunks + embeddings
   // --------------------------------------------------
 
   console.log(
-    "[7/8] Verifying persisted data...\n",
+    "[7/9] Creating RAG chunks and embeddings...\n",
+  );
+
+  const ragChunks =
+    chunkTranscript(result.segments, {
+      targetDurationSeconds: 60,
+    });
+
+  if (ragChunks.length === 0) {
+    throw new Error(
+      "RAG chunker produced no chunks",
+    );
+  }
+
+  console.log(
+    `Created ${ragChunks.length} RAG chunks`,
+  );
+
+  console.log("\nFirst 3 RAG chunks:");
+
+  for (const chunk of ragChunks.slice(0, 3)) {
+    console.log(
+      `  #${chunk.chunkIndex} ` +
+        `[${chunk.startSeconds.toFixed(2)}s → ` +
+        `${chunk.endSeconds.toFixed(2)}s]`,
+    );
+
+    console.log(
+      `  Embedding text: ${chunk.embeddingText}`,
+    );
+
+    console.log(
+      `  Display text:\n${chunk.displayText}\n`,
+    );
+  }
+
+  const embeddingProvider =
+    new TeiEmbeddingProvider({
+      baseUrl: "http://localhost:8081",
+    });
+
+  const embeddingService =
+    createEmbeddingService(
+      db,
+      embeddingProvider,
+    );
+
+  const embeddingResult =
+    await embeddingService.createTranscriptEmbeddings({
+      transcriptId: result.transcript.id,
+      chunks: ragChunks,
+      embeddingModel:
+        "BAAI/bge-small-en-v1.5",
+    });
+
+  if (
+    embeddingResult.length !==
+    ragChunks.length
+  ) {
+    throw new Error(
+      "Embedding count does not match RAG chunk count",
+    );
+  }
+
+  console.log(
+    `Persisted ${embeddingResult.length} embeddings\n`,
+  );
+
+  // --------------------------------------------------
+  // 8. Read back from PostgreSQL
+  // --------------------------------------------------
+
+  console.log(
+    "[8/9] Verifying persisted data...\n",
   );
 
   const transcriptRepository =
@@ -200,7 +288,9 @@ try {
     );
   }
 
-  console.log("Transcript retrieved successfully.");
+  console.log(
+    "Transcript retrieved successfully.",
+  );
 
   console.log(
     `Transcript ID: ${savedTranscript.id}`,
@@ -218,6 +308,10 @@ try {
     `Text length: ${savedTranscript.text.length}`,
   );
 
+  // --------------------------------------------------
+  // Verify transcript segments
+  // --------------------------------------------------
+
   const savedSegments =
     await transcriptRepository.listSegments(
       savedTranscript.id,
@@ -233,7 +327,9 @@ try {
     `Segments retrieved: ${savedSegments.length}\n`,
   );
 
-  console.log("First 5 persisted segments:");
+  console.log(
+    "First 5 persisted segments:",
+  );
 
   for (
     const segment of savedSegments.slice(0, 5)
@@ -250,7 +346,8 @@ try {
   // Verify timestamp range query
   // --------------------------------------------------
 
-  const firstSegment = savedSegments[0];
+  const firstSegment =
+    savedSegments[0];
 
   if (!firstSegment) {
     throw new Error(
@@ -287,57 +384,143 @@ try {
     );
   }
 
-  for (const segment of rangeSegments) {
-    console.log(
-      `  [${segment.startSeconds.toFixed(2)}s → ` +
-        `${segment.endSeconds.toFixed(2)}s] ` +
-        segment.text,
+  // --------------------------------------------------
+  // Verify embeddings
+  // --------------------------------------------------
+
+  const embeddingRepository =
+    createTranscriptEmbeddingRepository(db);
+
+  const savedEmbeddings =
+    await embeddingRepository.listByTranscript(
+      savedTranscript.id,
     );
+
+  if (savedEmbeddings.length === 0) {
+    throw new Error(
+      "No transcript embeddings were found",
+    );
+  }
+
+  console.log(
+    `\nEmbeddings retrieved: ${savedEmbeddings.length}`,
+  );
+
+  if (
+    savedEmbeddings.length !==
+    ragChunks.length
+  ) {
+    throw new Error(
+      `Expected ${ragChunks.length} embeddings, ` +
+        `got ${savedEmbeddings.length}`,
+    );
+  }
+
+  for (const embedding of savedEmbeddings) {
+    console.log(
+      `  #${embedding.chunkIndex} ` +
+        `[${embedding.startSeconds}s → ` +
+        `${embedding.endSeconds}s]`,
+    );
+
+    console.log(
+      `  Model: ${embedding.embeddingModel}`,
+    );
+
+    console.log(
+      `  Text: ${embedding.text.slice(0, 150)}...`,
+    );
+
+    console.log(
+      `  Embedding dimension: ${embedding.embedding.length}`,
+    );
+
+    if (embedding.embedding.length !== 384) {
+      throw new Error(
+        `Expected 384-dimensional embedding, ` +
+          `got ${embedding.embedding.length}`,
+      );
+    }
   }
 
   // --------------------------------------------------
   // Verification summary
   // --------------------------------------------------
 
-  console.log("\n----------------------------------------");
-  console.log("DATABASE VERIFICATION PASSED");
-  console.log("----------------------------------------");
+  console.log(
+    "\n----------------------------------------",
+  );
 
-  console.log(`User ID:       ${user.id}`);
-  console.log(`Video ID:      ${video.id}`);
   console.log(
-    `Transcript ID: ${savedTranscript.id}`,
+    "DATABASE VERIFICATION PASSED",
   );
+
   console.log(
-    `Segments:      ${savedSegments.length}`,
+    "----------------------------------------",
   );
+
+  console.log(`User ID:        ${user.id}`);
+  console.log(`Video ID:       ${video.id}`);
+
   console.log(
-    `Time matches:  ${rangeSegments.length}`,
+    `Transcript ID:  ${savedTranscript.id}`,
+  );
+
+  console.log(
+    `Segments:       ${savedSegments.length}`,
+  );
+
+  console.log(
+    `RAG chunks:     ${ragChunks.length}`,
+  );
+
+  console.log(
+    `Embeddings:     ${savedEmbeddings.length}`,
+  );
+
+  console.log(
+    `Vector size:    384`,
+  );
+
+  console.log(
+    `Time matches:   ${rangeSegments.length}`,
   );
 
   console.log(
     "\n========================================",
   );
+
   console.log(
     "       INTEGRATION TEST PASSED",
   );
+
   console.log(
     "========================================",
   );
 } catch (error) {
-  console.error("\n========================================");
-  console.error("       INTEGRATION TEST FAILED");
-  console.error("========================================\n");
+  console.error(
+    "\n========================================",
+  );
+
+  console.error(
+    "       INTEGRATION TEST FAILED",
+  );
+
+  console.error(
+    "========================================\n",
+  );
 
   console.error(error);
 
   process.exitCode = 1;
 } finally {
   // --------------------------------------------------
-  // 8. Cleanup
+  // 9. Cleanup
   // --------------------------------------------------
 
-  console.log("\nCleaning up test resources...");
+  console.log(
+    "\nCleaning up test resources...",
+  );
 
   if (testUserId) {
     const userRepository =
@@ -354,8 +537,8 @@ try {
       );
 
       console.log(
-        "Related video/transcript data " +
-          "was removed by cascade.",
+        "Related video/transcript/embedding " +
+          "data was removed by cascade.",
       );
     }
   }
@@ -365,6 +548,7 @@ try {
     force: true,
   });
 
-  console.log("Removed temporary media files.");
+  console.log(
+    "Removed temporary media files.",
+  );
 }
-
