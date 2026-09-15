@@ -1,13 +1,13 @@
-import {
-  desc,
-  eq,
-  sql,
-} from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import type { Database } from "../client.js";
-import {
-  transcriptEmbeddings,
-} from "../schema.js";
+import { transcriptEmbeddings } from "../schema.js";
+
+export type SearchSimilarTranscriptEmbeddingsInput = {
+  transcriptId: string;
+  embedding: number[];
+  limit?: number;
+};
 
 export type CreateTranscriptEmbeddingInput = {
   transcriptId: string;
@@ -19,13 +19,9 @@ export type CreateTranscriptEmbeddingInput = {
   embeddingModel: string;
 };
 
-export function createTranscriptEmbeddingRepository(
-  db: Database,
-) {
+export function createTranscriptEmbeddingRepository(db: Database) {
   return {
-    async create(
-      input: CreateTranscriptEmbeddingInput,
-    ) {
+    async create(input: CreateTranscriptEmbeddingInput) {
       const result = await db
         .insert(transcriptEmbeddings)
         .values({
@@ -42,48 +38,70 @@ export function createTranscriptEmbeddingRepository(
       return result[0];
     },
 
-    async createMany(
-      input: CreateTranscriptEmbeddingInput[],
-    ) {
+    async createMany(input: CreateTranscriptEmbeddingInput[]) {
       if (input.length === 0) {
         return [];
       }
 
-      return db
-        .insert(transcriptEmbeddings)
-        .values(input)
-        .returning();
+      return db.insert(transcriptEmbeddings).values(input).returning();
     },
 
-    async listByTranscript(
-      transcriptId: string,
-    ) {
+    async listByTranscript(transcriptId: string) {
       return db
         .select()
         .from(transcriptEmbeddings)
-        .where(
-          eq(
-            transcriptEmbeddings.transcriptId,
-            transcriptId,
-          ),
-        )
-        .orderBy(
-          transcriptEmbeddings.chunkIndex,
-        );
+        .where(eq(transcriptEmbeddings.transcriptId, transcriptId))
+        .orderBy(transcriptEmbeddings.chunkIndex);
     },
 
-    async deleteByTranscript(
-      transcriptId: string,
-    ) {
+    async deleteByTranscript(transcriptId: string) {
       return db
         .delete(transcriptEmbeddings)
-        .where(
-          eq(
-            transcriptEmbeddings.transcriptId,
-            transcriptId,
-          ),
-        )
+        .where(eq(transcriptEmbeddings.transcriptId, transcriptId))
         .returning();
+    },
+
+    async searchSimilar(input: SearchSimilarTranscriptEmbeddingsInput) {
+      const limit = input.limit ?? 5;
+
+      if (input.embedding.length !== 384) {
+        throw new Error(
+          `Expected 384-dimensional query embedding, got ${input.embedding.length}`,
+        );
+      }
+
+      if (limit <= 0) {
+        throw new Error("Search limit must be greater than zero");
+      }
+
+      const queryEmbedding = `[${input.embedding.join(",")}]`;
+
+      return db
+        .select({
+          id: transcriptEmbeddings.id,
+          transcriptId: transcriptEmbeddings.transcriptId,
+          chunkIndex: transcriptEmbeddings.chunkIndex,
+          text: transcriptEmbeddings.text,
+          startSeconds: transcriptEmbeddings.startSeconds,
+          endSeconds: transcriptEmbeddings.endSeconds,
+          embeddingModel: transcriptEmbeddings.embeddingModel,
+
+          similarity: sql<number>`
+        1 - (
+          ${transcriptEmbeddings.embedding}
+          <=> ${sql.raw(`'${queryEmbedding}'::vector`)}
+        )
+      `,
+        })
+        .from(transcriptEmbeddings)
+        .where(eq(transcriptEmbeddings.transcriptId, input.transcriptId))
+        .orderBy(
+          sql`
+        ${transcriptEmbeddings.embedding}
+        <=> ${sql.raw(`'${queryEmbedding}'::vector`)}
+      `,
+        )
+        .limit(limit);
     },
   };
 }
