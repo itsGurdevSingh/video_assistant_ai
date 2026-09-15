@@ -11,3 +11,8 @@ export {
   type RagChunkInputSegment,
   type RagChunkerOptions,
 } from "./rag/chunker.js";
+
+export {
+  createMistralModel,
+  type MistralModelOptions,
+} from "./models/mistral.js";
