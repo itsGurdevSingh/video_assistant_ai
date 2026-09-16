@@ -16,3 +16,9 @@ export {
   createMistralModel,
   type MistralModelOptions,
 } from "./models/mistral.js";
+
+export {
+  createTimestampTool,
+  type TimestampSegment,
+  type TimestampToolOptions,
+} from "./tools/timestamp.js";
