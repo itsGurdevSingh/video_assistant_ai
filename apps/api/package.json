@@ -9,6 +9,7 @@
     "test:media": "tsx src/test-media.ts"
   },
   "dependencies": {
+    "@langchain/core": "^1.2.11",
     "@video-assistant/ai": "workspace:*",
     "@video-assistant/db": "workspace:*",
     "@video-assistant/media": "workspace:*",

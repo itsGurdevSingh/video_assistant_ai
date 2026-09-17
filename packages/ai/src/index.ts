@@ -22,3 +22,18 @@ export {
   type TimestampSegment,
   type TimestampToolOptions,
 } from "./tools/timestamp.js";
+
+export {
+  createAgentNode,
+  type VideoAgentNodeOptions,
+} from "./agent/node.js";
+
+export {
+  createVideoAgentGraph,
+  type VideoAgentOptions,
+} from "./agent/graph.js";
+
+export {
+  formatSemanticContext,
+  type SemanticSearchResult,
+} from "./rag/context.js";
