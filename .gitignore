@@ -16,3 +16,11 @@ packages/media/tmp/
 
 # Whisper models
 docker/whisper/models/*.bin
+
+# Local media
+data/
+test-fixtures/videos/*.mp4
+
+#local dev test artifacts
+apps/api/src/tests
+tmp/

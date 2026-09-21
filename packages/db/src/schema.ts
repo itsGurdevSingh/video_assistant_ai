@@ -14,7 +14,7 @@ import {
 import { sql } from "drizzle-orm";
 
 export const videoSourceType = pgEnum("video_source_type", [
-  "youtube",
+  "remote_url",
   "upload",
 ]);
 
@@ -53,6 +53,7 @@ export const videos = pgTable("videos", {
     }),
 
   sourceType: videoSourceType("source_type").notNull(),
+  storageKey: text("storage_key"),
 
   sourceUrl: text("source_url"),
 

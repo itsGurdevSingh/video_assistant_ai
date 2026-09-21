@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1789023075392,
-      "tag": "0000_bent_veda",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1789026856397,
-      "tag": "0001_loose_frog_thor",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1789027174257,
-      "tag": "0002_empty_yellowjacket",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1789302072617,
-      "tag": "0003_loose_leper_queen",
+      "when": 1789818187173,
+      "tag": "0000_mushy_moon_knight",
       "breakpoints": true
     }
   ]

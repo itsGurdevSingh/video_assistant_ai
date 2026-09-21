@@ -6,8 +6,9 @@
 
   export type CreateVideoInput = {
     userId: string;
-    sourceType: "youtube" | "upload";
+    sourceType: "upload" | "remote_url";
     sourceUrl?: string;
+    storageKey?: string;
     title?: string;
     durationSeconds?: number;
   };

@@ -9,6 +9,7 @@
     "test:media": "tsx src/test-media.ts"
   },
   "dependencies": {
+    "@fastify/multipart": "^10.1.1",
     "@langchain/core": "^1.2.11",
     "@video-assistant/ai": "workspace:*",
     "@video-assistant/db": "workspace:*",
