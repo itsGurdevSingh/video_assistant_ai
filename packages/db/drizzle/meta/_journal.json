@@ -8,6 +8,13 @@
       "when": 1789818187173,
       "tag": "0000_mushy_moon_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790850048169,
+      "tag": "0001_tiresome_rage",
+      "breakpoints": true
     }
   ]
 }

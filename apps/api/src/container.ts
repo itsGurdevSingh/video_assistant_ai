@@ -14,6 +14,10 @@ import { createTimestampRetrievalService } from "./services/timestamp-retrieval.
 
 import { createChatService } from "./services/chat.service.js";
 
+import { createChatSessionService } from "./services/chat-session.service.js";
+
+import { createChatMessageService } from "./services/chat-message.service.js";
+
 import { config } from "dotenv";
 
 config({ path: "../../.env" });
@@ -53,6 +57,16 @@ export function createContainer() {
 
   const retrievalService = createRetrievalService(db, embeddingProvider);
 
+  const chatSessionService = createChatSessionService({
+    db,
+    videoService,
+  });
+
+  const chatMessageService = createChatMessageService({
+    db,
+    chatSessionService,
+  });
+
   const createTimestampRetrieval = (transcriptId: string) =>
     createTimestampRetrievalService({
       db,
@@ -75,6 +89,8 @@ export function createContainer() {
     videoService,
     videoProcessingService,
     retrievalService,
+    chatSessionService,
+    chatMessageService,
 
     createTimestampRetrieval,
   };

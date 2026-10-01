@@ -5,42 +5,34 @@ import {
   formatSemanticContext,
 } from "@video-assistant/ai";
 
-import {
-  createTranscriptRepository,
-} from "@video-assistant/db";
+import { createTranscriptRepository } from "@video-assistant/db";
 
-import { HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 
-import {
-  createVideoService,
-} from "./video.service.js";
+import { createVideoService } from "./video.service.js";
 
-import {
-  createRetrievalService,
-} from "./retrieval.service.js";
+import { createRetrievalService } from "./retrieval.service.js";
 
-import {
-  createTimestampRetrievalService,
-} from "./timestamp-retrieval.service.js";
+import { createTimestampRetrievalService } from "./timestamp-retrieval.service.js";
+
+import type { createChatSessionService } from "./chat-session.service.js";
+
+import type { createChatMessageService } from "./chat-message.service.js";
 
 export type ChatServiceDependencies = {
-  db: Parameters<
-    typeof createTranscriptRepository
-  >[0];
+  db: Parameters<typeof createTranscriptRepository>[0];
 
-  videoService: ReturnType<
-    typeof createVideoService
-  >;
+  videoService: ReturnType<typeof createVideoService>;
 
-  retrievalService: ReturnType<
-    typeof createRetrievalService
-  >;
+  retrievalService: ReturnType<typeof createRetrievalService>;
 
   createTimestampRetrieval: (
     transcriptId: string,
-  ) => ReturnType<
-    typeof createTimestampRetrievalService
-  >;
+  ) => ReturnType<typeof createTimestampRetrievalService>;
+
+  chatSessionService: ReturnType<typeof createChatSessionService>;
+
+  chatMessageService: ReturnType<typeof createChatMessageService>;
 };
 
 export type ChatServiceOptions = {
@@ -48,51 +40,33 @@ export type ChatServiceOptions = {
   mistralApiKey: string;
 };
 
-export function createChatService(
-  options: ChatServiceOptions,
-) {
-  const {
-    container,
-  } = options;
+export function createChatService(options: ChatServiceOptions) {
+  const { container } = options;
 
-  const transcriptRepository =
-    createTranscriptRepository(
-      container.db,
-    );
+  const transcriptRepository = createTranscriptRepository(container.db);
 
-  const model =
-    createMistralModel({
-      apiKey:
-        options.mistralApiKey,
-      model:
-        process.env.MISTRAL_MODEL ??
-        "open-mistral-nemo",
-      temperature: 0,
-    });
+  const model = createMistralModel({
+    apiKey: options.mistralApiKey,
+    model: process.env.MISTRAL_MODEL ?? "open-mistral-nemo",
+    temperature: 0,
+  });
 
   return {
     async askQuestion(input: {
       videoId: string;
+      sessionId?: string;
       question: string;
     }) {
-      const question =
-        input.question.trim();
+      const question = input.question.trim();
 
       if (!question) {
-        throw new Error(
-          "Question cannot be empty",
-        );
+        throw new Error("Question cannot be empty");
       }
 
-      const video =
-        await container.videoService.findById(
-          input.videoId,
-        );
+      const video = await container.videoService.findById(input.videoId);
 
       if (!video) {
-        throw new Error(
-          `Video not found: ${input.videoId}`,
-        );
+        throw new Error(`Video not found: ${input.videoId}`);
       }
 
       if (video.status !== "ready") {
@@ -101,16 +75,42 @@ export function createChatService(
         );
       }
 
-      const transcript =
-        await transcriptRepository.findByVideoId(
-          input.videoId,
-        );
+      const transcript = await transcriptRepository.findByVideoId(
+        input.videoId,
+      );
 
       if (!transcript) {
-        throw new Error(
-          `Transcript not found for video: ${input.videoId}`,
-        );
+        throw new Error(`Transcript not found for video: ${input.videoId}`);
       }
+
+      const session = input.sessionId
+        ? await container.chatSessionService.getSession({
+            videoId: input.videoId,
+            sessionId: input.sessionId,
+          })
+        : await container.chatSessionService.createSession({
+            videoId: input.videoId,
+          });
+
+      const history = await container.chatMessageService.listMessages({
+        videoId: input.videoId,
+        sessionId: session.id,
+      });
+
+      const conversationMessages = history.map((message) =>
+        message.role === "user"
+          ? new HumanMessage(message.content)
+          : new AIMessage(message.content),
+      );
+
+      await container.chatMessageService.appendMessage({
+        videoId: input.videoId,
+        sessionId: session.id,
+        role: "user",
+        content: question,
+      });
+
+      conversationMessages.push(new HumanMessage(question));
 
       /*
        * ============================================
@@ -118,18 +118,13 @@ export function createChatService(
        * ============================================
        */
 
-      const searchResults =
-        await container.retrievalService.semanticSearch({
-          transcriptId:
-            transcript.id,
-          query: question,
-          limit: 5,
-        });
+      const searchResults = await container.retrievalService.semanticSearch({
+        transcriptId: transcript.id,
+        query: question,
+        limit: 5,
+      });
 
-      const semanticContext =
-        formatSemanticContext(
-          searchResults,
-        );
+      const semanticContext = formatSemanticContext(searchResults);
 
       /*
        * ============================================
@@ -137,19 +132,14 @@ export function createChatService(
        * ============================================
        */
 
-      const timestampRetrieval =
-        container.createTimestampRetrieval(
-          transcript.id,
-        );
+      const timestampRetrieval = container.createTimestampRetrieval(
+        transcript.id,
+      );
 
-      const timestampTool =
-        createTimestampTool({
-          getSegments:
-            (timestampSeconds) =>
-              timestampRetrieval.getSegments(
-                timestampSeconds,
-              ),
-        });
+      const timestampTool = createTimestampTool({
+        getSegments: (timestampSeconds) =>
+          timestampRetrieval.getSegments(timestampSeconds),
+      });
 
       /*
        * ============================================
@@ -157,48 +147,47 @@ export function createChatService(
        * ============================================
        */
 
-      const graph =
-        createVideoAgentGraph({
-          model,
-          timestampTool,
-        });
+      const graph = createVideoAgentGraph({
+        model,
+        timestampTool,
+      });
 
-      const result =
-        await graph.invoke(
-          {
-            messages: [new HumanMessage(question)],
+      const result = await graph.invoke(
+        {
+          messages: conversationMessages,
+        },
+        {
+          context: {
+            semanticContext,
           },
-          {
-            context: {
-              semanticContext,
-            },
-          },
-        );
+        },
+      );
 
-      const messages =
-        result.messages;
+      const messages = result.messages;
 
-      const lastMessage =
-        messages[messages.length - 1];
+      const lastMessage = messages[messages.length - 1];
 
       if (!lastMessage) {
-        throw new Error(
-          "Agent returned no response",
-        );
+        throw new Error("Agent returned no response");
       }
 
-      const content =
-        lastMessage.content;
+      const content = lastMessage.content;
 
       if (typeof content !== "string") {
-        throw new Error(
-          "Agent returned non-text response",
-        );
+        throw new Error("Agent returned non-text response");
       }
+
+      await container.chatMessageService.appendMessage({
+        videoId: input.videoId,
+        sessionId: session.id,
+        role: "assistant",
+        content,
+      });
 
       return {
         videoId: input.videoId,
         transcriptId: transcript.id,
+        sessionId: session.id,
         question,
         answer: content,
         sources: searchResults,

@@ -6,9 +6,10 @@ import {
   timestamp,
   check,
   real,
+  index,
   uniqueIndex,
   uuid,
-  vector
+  vector,
 } from "drizzle-orm/pg-core";
 
 import { sql } from "drizzle-orm";
@@ -30,8 +31,13 @@ export const videoStatus = pgEnum("video_status", [
   "failed",
 ]);
 
-export type VideoStatus =
-  (typeof videoStatus.enumValues)[number];
+export const chatMessageRole = pgEnum("chat_message_role", [
+  "user",
+  "assistant",
+]);
+
+export type VideoStatus = (typeof videoStatus.enumValues)[number];
+export type ChatMessageRole = (typeof chatMessageRole.enumValues)[number];
 
 export const users = pgTable("users", {
   id: uuid().primaryKey().defaultRandom(),
@@ -77,6 +83,63 @@ export const videos = pgTable("videos", {
     .defaultNow()
     .notNull(),
 });
+
+export const chatSessions = pgTable(
+  "chat_sessions",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+
+    videoId: uuid("video_id")
+      .notNull()
+      .references(() => videos.id, {
+        onDelete: "cascade",
+      }),
+
+    title: text(),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("chat_sessions_video_id_idx").on(table.videoId)],
+);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => chatSessions.id, {
+        onDelete: "cascade",
+      }),
+
+    role: chatMessageRole().notNull(),
+
+    content: text().notNull(),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("chat_messages_session_created_at_idx").on(
+      table.sessionId,
+      table.createdAt,
+    ),
+  ],
+);
 
 export const transcripts = pgTable(
   "transcripts",
@@ -144,43 +207,32 @@ export const transcriptSegments = pgTable(
   ],
 );
 
+export const transcriptEmbeddings = pgTable("transcript_embeddings", {
+  id: uuid("id").defaultRandom().primaryKey(),
 
-export const transcriptEmbeddings = pgTable(
-  "transcript_embeddings",
-  {
-    id: uuid("id")
-      .defaultRandom()
-      .primaryKey(),
+  transcriptId: uuid("transcript_id")
+    .notNull()
+    .references(() => transcripts.id, {
+      onDelete: "cascade",
+    }),
 
-    transcriptId: uuid("transcript_id")
-      .notNull()
-      .references(() => transcripts.id, {
-        onDelete: "cascade",
-      }),
+  chunkIndex: integer("chunk_index").notNull(),
 
-    chunkIndex: integer("chunk_index")
-      .notNull(),
+  text: text("text").notNull(),
 
-    text: text("text")
-      .notNull(),
+  embedding: vector("embedding", {
+    dimensions: 384,
+  }).notNull(),
 
-    embedding: vector("embedding", {
-      dimensions: 384,
-    }).notNull(),
+  startSeconds: real("start_seconds").notNull(),
 
-    startSeconds: real("start_seconds")
-      .notNull(),
+  endSeconds: real("end_seconds").notNull(),
 
-    endSeconds: real("end_seconds")
-      .notNull(),
+  embeddingModel: text("embedding_model").notNull(),
 
-    embeddingModel: text("embedding_model")
-      .notNull(),
-
-    createdAt: timestamp("created_at", {
-      withTimezone: true,
-    })
-      .defaultNow()
-      .notNull(),
-  },
-);
+  createdAt: timestamp("created_at", {
+    withTimezone: true,
+  })
+    .defaultNow()
+    .notNull(),
+});

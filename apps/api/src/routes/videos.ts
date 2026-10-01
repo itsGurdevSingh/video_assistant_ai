@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import type { AppContainer } from "../container.js";
 import path from "node:path";
 
@@ -75,14 +75,101 @@ export async function videoRoutes(
     }
   });
 
+  app.post("/videos/:videoId/chat/sessions", async (request, reply) => {
+    const { videoId } = request.params as { videoId: string };
+    const body = request.body as { title?: unknown } | undefined;
+
+    if (body?.title !== undefined && typeof body.title !== "string") {
+      return reply.status(400).send({
+        error: "Session title must be a string",
+      });
+    }
+
+    try {
+      const session = await container.chatSessionService.createSession({
+        videoId,
+        title: body?.title,
+      });
+
+      return reply.status(201).send(session);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (message.startsWith("Video not found")) {
+        return reply.status(404).send({ error: message });
+      }
+
+      return reply.status(500).send({
+        error: "Failed to create chat session",
+      });
+    }
+  });
+
+  app.get("/videos/:videoId/chat/sessions", async (request, reply) => {
+    const { videoId } = request.params as { videoId: string };
+
+    try {
+      const sessions = await container.chatSessionService.listSessions(videoId);
+
+      return reply.status(200).send(sessions);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (message.startsWith("Video not found")) {
+        return reply.status(404).send({ error: message });
+      }
+
+      return reply.status(500).send({
+        error: "Failed to list chat sessions",
+      });
+    }
+  });
+
+  app.post(
+    "/videos/:videoId/chat/sessions/:sessionId/messages",
+    async (request, reply) => {
+      const { videoId, sessionId } = request.params as {
+        videoId: string;
+        sessionId: string;
+      };
+
+      const body = request.body as
+        | {
+            question?: string;
+          }
+        | undefined;
+
+      if (typeof body?.question !== "string" || !body.question.trim()) {
+        return reply.status(400).send({
+          error: "Question is required",
+        });
+      }
+
+      try {
+        const result = await container.chatService.askQuestion({
+          videoId,
+          sessionId,
+          question: body.question,
+        });
+
+        return reply.status(200).send(result);
+      } catch (error) {
+        return sendChatError(reply, error);
+      }
+    },
+  );
+
   app.post("/videos/:videoId/chat", async (request, reply) => {
     const { videoId } = request.params as {
       videoId: string;
     };
 
-    const body = request.body as {
-      question?: string;
-    } | undefined;
+    const body = request.body as
+      | {
+          sessionId?: string;
+          question?: string;
+        }
+      | undefined;
 
     if (typeof body?.question !== "string" || !body.question.trim()) {
       return reply.status(400).send({
@@ -93,6 +180,7 @@ export async function videoRoutes(
     try {
       const result = await container.chatService.askQuestion({
         videoId,
+        sessionId: body.sessionId,
         question: body.question,
       });
 
@@ -100,30 +188,28 @@ export async function videoRoutes(
     } catch (error) {
       console.error("VIDEO CHAT ERROR:", error);
 
-      const message = error instanceof Error ? error.message : String(error);
-
-      if (message.startsWith("Video not found")) {
-        return reply.status(404).send({
-          error: message,
-        });
-      }
-
-      if (message.startsWith("Transcript not found")) {
-        return reply.status(404).send({
-          error: message,
-        });
-      }
-
-      if (message.startsWith("Video is not ready")) {
-        return reply.status(409).send({
-          error: message,
-        });
-      }
-
-      return reply.status(500).send({
-        error: "Failed to answer video question",
-      });
+      return sendChatError(reply, error);
     }
+  });
+}
+
+function sendChatError(reply: FastifyReply, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (
+    message.startsWith("Video not found") ||
+    message.startsWith("Transcript not found") ||
+    message.startsWith("Chat session not found")
+  ) {
+    return reply.status(404).send({ error: message });
+  }
+
+  if (message.startsWith("Video is not ready")) {
+    return reply.status(409).send({ error: message });
+  }
+
+  return reply.status(500).send({
+    error: "Failed to answer video question",
   });
 }
 
