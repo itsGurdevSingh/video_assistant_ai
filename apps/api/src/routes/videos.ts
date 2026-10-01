@@ -42,21 +42,23 @@ export async function videoRoutes(
       });
     }
 
-    const buffer = await file.toBuffer();
-
-    if (buffer.length === 0) {
-      return reply.status(400).send({
-        error: "Uploaded video is empty",
-      });
-    }
-
     const videoId = crypto.randomUUID();
 
     const extension = getExtension(file.filename, file.mimetype);
 
     const storageKey = `uploads/${videoId}${extension}`;
 
-    await container.storage.write(storageKey, buffer);
+    const byteCount = await container.storage.writeStream(
+      storageKey,
+      file.file,
+    );
+
+    if (byteCount === 0) {
+      await container.storage.delete(storageKey).catch(() => {});
+      return reply.status(400).send({
+        error: "Uploaded video is empty",
+      });
+    }
 
     try {
       const video = await container.videoService.createVideo({
