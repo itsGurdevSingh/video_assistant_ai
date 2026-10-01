@@ -159,6 +159,55 @@ export async function videoRoutes(
     },
   );
 
+  app.post(
+    "/videos/:videoId/chat/sessions/:sessionId/messages/stream",
+    async (request, reply) => {
+      const { videoId, sessionId } = request.params as {
+        videoId: string;
+        sessionId: string;
+      };
+
+      const body = request.body as
+        | {
+            question?: string;
+          }
+        | undefined;
+
+      if (typeof body?.question !== "string" || !body.question.trim()) {
+        return reply.status(400).send({
+          error: "Question is required",
+        });
+      }
+
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+
+      try {
+        const events = container.chatService.streamQuestion({
+          videoId,
+          sessionId,
+          question: body.question,
+        });
+
+        for await (const event of events) {
+          reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+
+        reply.raw.write(
+          `event: error\ndata: ${JSON.stringify({ error: message })}\n\n`,
+        );
+      } finally {
+        reply.raw.end();
+      }
+    },
+  );
+
   app.post("/videos/:videoId/chat", async (request, reply) => {
     const { videoId } = request.params as {
       videoId: string;

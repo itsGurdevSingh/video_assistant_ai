@@ -1,5 +1,5 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import { SystemMessage } from "@langchain/core/messages";
+import { AIMessageChunk, SystemMessage } from "@langchain/core/messages";
 import type { Runtime } from "@langchain/langgraph";
 
 import type { ToolCallingChatModel } from "../models/chat-model.js";
@@ -38,7 +38,13 @@ ${context.semanticContext}
 
     const messages = [new SystemMessage(systemMessage), ...state.messages];
 
-    const response = await modelWithTools.invoke(messages);
+    let response = new AIMessageChunk({});
+
+    const stream = await modelWithTools.stream(messages);
+
+    for await (const chunk of stream) {
+      response = response.concat(chunk);
+    }
 
     return {
       messages: [response],
