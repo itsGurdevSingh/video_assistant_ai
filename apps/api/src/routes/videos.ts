@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { AppContainer } from "../container.js";
 import path from "node:path";
+import { getAuthenticatedUser } from "./auth.js";
 
 export async function videoRoutes(
   app: FastifyInstance,
@@ -11,6 +12,9 @@ export async function videoRoutes(
   const { container } = options;
 
   app.post("/videos", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply, container);
+    if (!user) return;
+
     const file = await request.file();
 
     if (!file) {
@@ -56,7 +60,7 @@ export async function videoRoutes(
 
     try {
       const video = await container.videoService.createVideo({
-        userId: "cc2f365d-0816-4f25-b709-35a6fedb8242",
+        userId: user.id,
         sourceType: "upload",
         storageKey,
         title: file.filename,
@@ -76,6 +80,9 @@ export async function videoRoutes(
   });
 
   app.post("/videos/:videoId/chat/sessions", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply, container);
+    if (!user) return;
+
     const { videoId } = request.params as { videoId: string };
     const body = request.body as { title?: unknown } | undefined;
 
@@ -88,6 +95,7 @@ export async function videoRoutes(
     try {
       const session = await container.chatSessionService.createSession({
         videoId,
+        userId: user.id,
         title: body?.title,
       });
 
@@ -106,10 +114,16 @@ export async function videoRoutes(
   });
 
   app.get("/videos/:videoId/chat/sessions", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply, container);
+    if (!user) return;
+
     const { videoId } = request.params as { videoId: string };
 
     try {
-      const sessions = await container.chatSessionService.listSessions(videoId);
+      const sessions = await container.chatSessionService.listSessions(
+        videoId,
+        user.id,
+      );
 
       return reply.status(200).send(sessions);
     } catch (error) {
@@ -125,9 +139,48 @@ export async function videoRoutes(
     }
   });
 
+  app.get(
+    "/videos/:videoId/chat/sessions/:sessionId/messages",
+    async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply, container);
+      if (!user) return;
+
+      const { videoId, sessionId } = request.params as {
+        videoId: string;
+        sessionId: string;
+      };
+
+      try {
+        const messages = await container.chatMessageService.listMessages({
+          videoId,
+          userId: user.id,
+          sessionId,
+        });
+
+        return reply.status(200).send(messages);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+
+        if (
+          message.startsWith("Video not found") ||
+          message.startsWith("Chat session not found")
+        ) {
+          return reply.status(404).send({ error: message });
+        }
+
+        return reply.status(500).send({
+          error: "Failed to load chat messages",
+        });
+      }
+    },
+  );
+
   app.post(
     "/videos/:videoId/chat/sessions/:sessionId/messages",
     async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply, container);
+      if (!user) return;
+
       const { videoId, sessionId } = request.params as {
         videoId: string;
         sessionId: string;
@@ -148,6 +201,7 @@ export async function videoRoutes(
       try {
         const result = await container.chatService.askQuestion({
           videoId,
+          userId: user.id,
           sessionId,
           question: body.question,
         });
@@ -162,6 +216,9 @@ export async function videoRoutes(
   app.post(
     "/videos/:videoId/chat/sessions/:sessionId/messages/stream",
     async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply, container);
+      if (!user) return;
+
       const { videoId, sessionId } = request.params as {
         videoId: string;
         sessionId: string;
@@ -189,6 +246,7 @@ export async function videoRoutes(
       try {
         const events = container.chatService.streamQuestion({
           videoId,
+          userId: user.id,
           sessionId,
           question: body.question,
         });
@@ -209,6 +267,9 @@ export async function videoRoutes(
   );
 
   app.post("/videos/:videoId/chat", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply, container);
+    if (!user) return;
+
     const { videoId } = request.params as {
       videoId: string;
     };
@@ -229,6 +290,7 @@ export async function videoRoutes(
     try {
       const result = await container.chatService.askQuestion({
         videoId,
+        userId: user.id,
         sessionId: body.sessionId,
         question: body.question,
       });
@@ -240,6 +302,21 @@ export async function videoRoutes(
       return sendChatError(reply, error);
     }
   });
+}
+
+async function requireAuthenticatedUser(
+  request: { headers: { authorization?: string } },
+  reply: { status: (code: number) => { send: (body: unknown) => unknown } },
+  container: AppContainer,
+) {
+  const user = await getAuthenticatedUser(request, container.authService);
+
+  if (!user) {
+    reply.status(401).send({ error: "Authentication required" });
+    return null;
+  }
+
+  return user;
 }
 
 function sendChatError(reply: FastifyReply, error: unknown) {

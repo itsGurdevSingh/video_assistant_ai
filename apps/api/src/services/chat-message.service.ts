@@ -17,6 +17,7 @@ export function createChatMessageService(options: ChatMessageServiceOptions) {
   return {
     async appendMessage(input: {
       videoId: string;
+      userId: string;
       sessionId: string;
       role: ChatMessageRole;
       content: string;
@@ -29,6 +30,7 @@ export function createChatMessageService(options: ChatMessageServiceOptions) {
 
       await options.chatSessionService.getSession({
         videoId: input.videoId,
+        userId: input.userId,
         sessionId: input.sessionId,
       });
 
@@ -43,7 +45,11 @@ export function createChatMessageService(options: ChatMessageServiceOptions) {
       return message;
     },
 
-    async listMessages(input: { videoId: string; sessionId: string }) {
+    async listMessages(input: {
+      videoId: string;
+      userId: string;
+      sessionId: string;
+    }) {
       await options.chatSessionService.getSession(input);
 
       return repository.listBySession(input.sessionId);

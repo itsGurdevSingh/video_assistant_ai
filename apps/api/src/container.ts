@@ -18,6 +18,8 @@ import { createChatSessionService } from "./services/chat-session.service.js";
 
 import { createChatMessageService } from "./services/chat-message.service.js";
 
+import { createAuthService } from "./services/auth.service.js";
+
 import { config } from "dotenv";
 
 config({ path: "../../.env" });
@@ -46,6 +48,8 @@ export function createContainer() {
    */
 
   const videoService = createVideoService(db);
+
+  const authService = createAuthService(db);
 
   const videoProcessingService = createVideoProcessingService({
     db,
@@ -87,6 +91,7 @@ export function createContainer() {
     embeddingProvider,
 
     videoService,
+    authService,
     videoProcessingService,
     retrievalService,
     chatSessionService,

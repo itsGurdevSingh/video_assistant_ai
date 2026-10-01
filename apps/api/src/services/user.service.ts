@@ -17,6 +17,8 @@ export function createUserService(
       }
 
       return userRepository.create({
+        email: input.email,
+        passwordHash: input.passwordHash,
         name,
       });
     },
@@ -40,4 +42,3 @@ export function createUserService(
     },
   };
 }
-

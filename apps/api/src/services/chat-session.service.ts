@@ -24,8 +24,16 @@ export function createChatSessionService(options: ChatSessionServiceOptions) {
   }
 
   return {
-    async createSession(input: { videoId: string; title?: string }) {
-      await ensureVideoExists(input.videoId);
+    async createSession(input: {
+      videoId: string;
+      userId: string;
+      title?: string;
+    }) {
+      const video = await ensureVideoExists(input.videoId);
+
+      if (video.userId !== input.userId) {
+        throw new Error(`Video not found: ${input.videoId}`);
+      }
 
       return repository.create({
         videoId: input.videoId,
@@ -33,8 +41,16 @@ export function createChatSessionService(options: ChatSessionServiceOptions) {
       });
     },
 
-    async getSession(input: { videoId: string; sessionId: string }) {
-      await ensureVideoExists(input.videoId);
+    async getSession(input: {
+      videoId: string;
+      userId: string;
+      sessionId: string;
+    }) {
+      const video = await ensureVideoExists(input.videoId);
+
+      if (video.userId !== input.userId) {
+        throw new Error(`Chat session not found: ${input.sessionId}`);
+      }
 
       const session = await repository.findByIdForVideo(
         input.sessionId,
@@ -48,8 +64,10 @@ export function createChatSessionService(options: ChatSessionServiceOptions) {
       return session;
     },
 
-    async listSessions(videoId: string) {
-      await ensureVideoExists(videoId);
+    async listSessions(videoId: string, userId: string) {
+      const video = await ensureVideoExists(videoId);
+
+      if (video.userId !== userId) return [];
 
       return repository.listByVideo(videoId);
     },

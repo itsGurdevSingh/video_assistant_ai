@@ -9,6 +9,12 @@ type Video = {
   durationSeconds?: number | null;
 };
 
+type User = {
+  id: string;
+  email: string;
+  name: string;
+};
+
 type Session = {
   id: string;
   title?: string | null;
@@ -21,6 +27,11 @@ type ChatMessage = {
   sources?: Source[];
 };
 
+type PersistedMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 type Source = {
   chunkIndex: number;
   startSeconds: number;
@@ -31,6 +42,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export default function Home() {
   const [video, setVideo] = useState<Video | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authName, setAuthName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -47,6 +65,80 @@ export default function Home() {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
+
+  useEffect(() => {
+    const storedToken = window.localStorage.getItem("video-assistant-token");
+    if (!storedToken) {
+      queueMicrotask(() => setAuthLoading(false));
+      return;
+    }
+
+    void fetch(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${storedToken}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Session expired");
+        const result = (await response.json()) as { user: User };
+        setAuthToken(storedToken);
+        setUser(result.user);
+      })
+      .catch(() => window.localStorage.removeItem("video-assistant-token"))
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  async function submitAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setAuthLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/auth/${authMode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          authMode === "register"
+            ? { name: authName, email: authEmail, password: authPassword }
+            : { email: authEmail, password: authPassword },
+        ),
+      });
+
+      const result = (await response.json()) as { token?: string; user?: User; error?: string };
+      if (!response.ok || !result.token || !result.user) {
+        throw new Error(result.error ?? "Authentication failed");
+      }
+
+      window.localStorage.setItem("video-assistant-token", result.token);
+      setAuthToken(result.token);
+      setUser(result.user);
+      setAuthPassword("");
+    } catch (authError) {
+      setError(authError instanceof Error ? authError.message : "Authentication failed");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function signOut() {
+    if (authToken) {
+      await fetch(`${API_URL}/auth/logout`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      });
+    }
+    window.localStorage.removeItem("video-assistant-token");
+    setAuthToken(null);
+    setUser(null);
+    setVideo(null);
+    setMessages([]);
+  }
+
+  function authHeaders(): Record<string, string> {
+    return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  }
 
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -68,6 +160,7 @@ export default function Home() {
 
       const response = await fetch(`${API_URL}/videos`, {
         method: "POST",
+        headers: authHeaders(),
         body: formData,
       });
 
@@ -86,12 +179,38 @@ export default function Home() {
   }
 
   async function loadSessions(videoId: string) {
-    const response = await fetch(`${API_URL}/videos/${videoId}/chat/sessions`);
+    const response = await fetch(`${API_URL}/videos/${videoId}/chat/sessions`, {
+      headers: authHeaders(),
+    });
     if (!response.ok) return;
 
     const nextSessions = (await response.json()) as Session[];
     setSessions(nextSessions);
-    if (nextSessions[0]) setActiveSessionId(nextSessions[0].id);
+    if (nextSessions[0]) await selectSession(videoId, nextSessions[0].id);
+  }
+
+  async function selectSession(videoId: string, sessionId: string) {
+    setActiveSessionId(sessionId);
+    setMessages([]);
+    setError(null);
+
+    const response = await fetch(
+      `${API_URL}/videos/${videoId}/chat/sessions/${sessionId}/messages`,
+      { headers: authHeaders() },
+    );
+
+    if (!response.ok) {
+      setError("Could not load this conversation.");
+      return;
+    }
+
+    const persistedMessages = (await response.json()) as PersistedMessage[];
+    setMessages(
+      persistedMessages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      })),
+    );
   }
 
   async function createSession() {
@@ -100,7 +219,7 @@ export default function Home() {
     setError(null);
     const response = await fetch(`${API_URL}/videos/${video.id}/chat/sessions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ title: "New conversation" }),
     });
 
@@ -134,7 +253,7 @@ export default function Home() {
         `${API_URL}/videos/${video.id}/chat/sessions/${activeSessionId}/messages/stream`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({ question: text }),
         },
       );
@@ -213,6 +332,27 @@ export default function Home() {
 
   const activeSession = sessions.find((session) => session.id === activeSessionId);
 
+  if (authLoading) return <main className="app-shell"><div className="loading-state">Opening your workspace...</div></main>;
+
+  if (!user || !authToken) {
+    return (
+      <main className="app-shell auth-shell">
+        <section className="auth-panel">
+          <div className="brand-lockup"><span className="brand-mark">VA</span><div><p className="eyebrow">Private video intelligence</p><h1>Video Assistant</h1></div></div>
+          <div className="auth-copy"><p className="eyebrow">Welcome back</p><h2>{authMode === "login" ? "Your videos, ready for questions." : "Make your videos searchable."}</h2><p>Sign in to keep your video library and conversations attached to your account.</p></div>
+          <form className="auth-form" onSubmit={submitAuth}>
+            {authMode === "register" && <label>Name<input value={authName} onChange={(event) => setAuthName(event.target.value)} placeholder="Your name" required /></label>}
+            <label>Email<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" required /></label>
+            <label>Password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="At least 8 characters" minLength={8} required /></label>
+            <button className="auth-submit" type="submit">{authMode === "login" ? "Sign in" : "Create account"}<span>↗</span></button>
+          </form>
+          {error && <p className="error-message">{error}</p>}
+          <button className="auth-switch" onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setError(null); }}>{authMode === "login" ? "Need an account? Create one" : "Already have an account? Sign in"}</button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -223,7 +363,7 @@ export default function Home() {
             <h1>Video Assistant</h1>
           </div>
         </div>
-        <div className="topbar-status"><span className="status-dot" />Local workspace</div>
+        <div className="topbar-actions"><div className="topbar-status"><span className="status-dot" />{user.name}</div><button className="sign-out" onClick={signOut}>Sign out</button></div>
       </header>
 
       {!video ? (
@@ -255,7 +395,7 @@ export default function Home() {
             </div>
             <div className="session-list">
               {sessions.map((session, index) => (
-                <button key={session.id} className={`session-item ${session.id === activeSessionId ? "active" : ""}`} onClick={() => { setActiveSessionId(session.id); setMessages([]); }}>
+                <button key={session.id} className={`session-item ${session.id === activeSessionId ? "active" : ""}`} onClick={() => void selectSession(video.id, session.id)}>
                   <span className="session-number">{String(index + 1).padStart(2, "0")}</span>
                   <span><strong>{session.title ?? "Conversation"}</strong><small>{new Date(session.updatedAt).toLocaleDateString()}</small></span>
                 </button>

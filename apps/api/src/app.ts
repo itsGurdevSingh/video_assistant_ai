@@ -4,6 +4,7 @@ import multipart from "@fastify/multipart";
 import { db, pool } from "@video-assistant/db";
 
 import { videoRoutes } from "./routes/videos.js";
+import { authRoutes } from "./routes/auth.js";
 import { createContainer } from "./container.js";
 
 const container = createContainer();
@@ -37,6 +38,7 @@ export async function buildApp() {
   });
 
   await app.register(videoRoutes, { container });
+  await app.register(authRoutes, { container });
 
   return app;
 }

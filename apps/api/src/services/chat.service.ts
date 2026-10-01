@@ -59,6 +59,7 @@ export function createChatService(options: ChatServiceOptions) {
   return {
     async askQuestion(input: {
       videoId: string;
+      userId: string;
       sessionId?: string;
       question: string;
     }) {
@@ -91,14 +92,17 @@ export function createChatService(options: ChatServiceOptions) {
       const session = input.sessionId
         ? await container.chatSessionService.getSession({
             videoId: input.videoId,
+            userId: input.userId,
             sessionId: input.sessionId,
           })
         : await container.chatSessionService.createSession({
             videoId: input.videoId,
+            userId: input.userId,
           });
 
       const history = await container.chatMessageService.listMessages({
         videoId: input.videoId,
+        userId: input.userId,
         sessionId: session.id,
       });
 
@@ -110,6 +114,7 @@ export function createChatService(options: ChatServiceOptions) {
 
       await container.chatMessageService.appendMessage({
         videoId: input.videoId,
+        userId: input.userId,
         sessionId: session.id,
         role: "user",
         content: question,
@@ -184,6 +189,7 @@ export function createChatService(options: ChatServiceOptions) {
 
       await container.chatMessageService.appendMessage({
         videoId: input.videoId,
+        userId: input.userId,
         sessionId: session.id,
         role: "assistant",
         content,
@@ -201,6 +207,7 @@ export function createChatService(options: ChatServiceOptions) {
 
     async *streamQuestion(input: {
       videoId: string;
+      userId: string;
       sessionId: string;
       question: string;
     }): AsyncGenerator<ChatStreamEvent> {
@@ -232,11 +239,13 @@ export function createChatService(options: ChatServiceOptions) {
 
       const session = await container.chatSessionService.getSession({
         videoId: input.videoId,
+        userId: input.userId,
         sessionId: input.sessionId,
       });
 
       const history = await container.chatMessageService.listMessages({
         videoId: input.videoId,
+        userId: input.userId,
         sessionId: session.id,
       });
 
@@ -248,6 +257,7 @@ export function createChatService(options: ChatServiceOptions) {
 
       await container.chatMessageService.appendMessage({
         videoId: input.videoId,
+        userId: input.userId,
         sessionId: session.id,
         role: "user",
         content: question,
@@ -316,6 +326,7 @@ export function createChatService(options: ChatServiceOptions) {
 
       await container.chatMessageService.appendMessage({
         videoId: input.videoId,
+        userId: input.userId,
         sessionId: session.id,
         role: "assistant",
         content: answer,
