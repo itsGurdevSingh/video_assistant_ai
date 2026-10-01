@@ -1,27 +1,22 @@
-import {
-  db,
-} from "@video-assistant/db";
+import { db } from "@video-assistant/db";
 
-import {
-  LocalStorage,
-  WhisperCppProvider,
-} from "@video-assistant/media";
+import { LocalStorage, WhisperCppProvider } from "@video-assistant/media";
 
-import {
-  TeiEmbeddingProvider,
-} from "@video-assistant/ai";
+import { TeiEmbeddingProvider } from "@video-assistant/ai";
 
-import {
-  createVideoService,
-} from "./services/video.service.js";
+import { createVideoService } from "./services/video.service.js";
 
-import {
-  createVideoProcessingService,
-} from "./services/video-processing.service.js";
+import { createVideoProcessingService } from "./services/video-processing.service.js";
 
-import {
-  createRetrievalService,
-} from "./services/retrieval.service.js";
+import { createRetrievalService } from "./services/retrieval.service.js";
+
+import { createTimestampRetrievalService } from "./services/timestamp-retrieval.service.js";
+
+import { createChatService } from "./services/chat.service.js";
+
+import { config } from "dotenv";
+
+config({ path: "../../.env" });
 
 export function createContainer() {
   /*
@@ -30,25 +25,15 @@ export function createContainer() {
    * ============================================
    */
 
-  const storage =
-    new LocalStorage(
-      process.env.MEDIA_STORAGE_PATH ??
-        "./data",
-    );
+  const storage = new LocalStorage(process.env.MEDIA_STORAGE_PATH ?? "./data");
 
-  const transcriptionProvider =
-    new WhisperCppProvider({
-      baseUrl:
-        process.env.WHISPER_BASE_URL ??
-        "http://localhost:8080",
-    });
+  const transcriptionProvider = new WhisperCppProvider({
+    baseUrl: process.env.WHISPER_BASE_URL ?? "http://localhost:8080",
+  });
 
-  const embeddingProvider =
-    new TeiEmbeddingProvider({
-      baseUrl:
-        process.env.EMBEDDINGS_BASE_URL ??
-        "http://localhost:8081",
-    });
+  const embeddingProvider = new TeiEmbeddingProvider({
+    baseUrl: process.env.EMBEDDINGS_BASE_URL ?? "http://localhost:8081",
+  });
 
   /*
    * ============================================
@@ -56,27 +41,31 @@ export function createContainer() {
    * ============================================
    */
 
-  const videoService =
-    createVideoService(db);
+  const videoService = createVideoService(db);
 
-  const videoProcessingService =
-    createVideoProcessingService({
+  const videoProcessingService = createVideoProcessingService({
+    db,
+    storage,
+    transcriptionProvider,
+    embeddingProvider,
+    embeddingModel: process.env.EMBEDDING_MODEL ?? "BAAI/bge-small-en-v1.5",
+  });
+
+  const retrievalService = createRetrievalService(db, embeddingProvider);
+
+  const createTimestampRetrieval = (transcriptId: string) =>
+    createTimestampRetrievalService({
       db,
-      storage,
-      transcriptionProvider,
-      embeddingProvider,
-      embeddingModel:
-        process.env.EMBEDDING_MODEL ??
-        "BAAI/bge-small-en-v1.5",
+      transcriptId,
     });
 
-  const retrievalService =
-    createRetrievalService(
-      db,
-      embeddingProvider,
-    );
+  /*
+   * ============================================
+   * Base container
+   * ============================================
+   */
 
-  return {
+  const baseContainer = {
     db,
     storage,
 
@@ -86,8 +75,19 @@ export function createContainer() {
     videoService,
     videoProcessingService,
     retrievalService,
+
+    createTimestampRetrieval,
+  };
+
+  const chatService = createChatService({
+    container: baseContainer,
+    mistralApiKey: process.env.MISTRAL_API_KEY!,
+  });
+
+  return {
+    ...baseContainer,
+    chatService,
   };
 }
 
-export type AppContainer =
-  ReturnType<typeof createContainer>;
+export type AppContainer = ReturnType<typeof createContainer>;

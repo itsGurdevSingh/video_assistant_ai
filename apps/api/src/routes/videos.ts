@@ -30,8 +30,7 @@ export async function videoRoutes(
     ]);
 
     const isVideo =
-      file.mimetype.startsWith("video/") ||
-      allowedVideoExtensions.has(exten);
+      file.mimetype.startsWith("video/") || allowedVideoExtensions.has(exten);
 
     if (!isVideo) {
       return reply.status(400).send({
@@ -73,6 +72,57 @@ export async function videoRoutes(
       await container.storage.delete(storageKey).catch(() => {});
 
       throw error;
+    }
+  });
+
+  app.post("/videos/:videoId/chat", async (request, reply) => {
+    const { videoId } = request.params as {
+      videoId: string;
+    };
+
+    const body = request.body as {
+      question?: string;
+    } | undefined;
+
+    if (typeof body?.question !== "string" || !body.question.trim()) {
+      return reply.status(400).send({
+        error: "Question is required",
+      });
+    }
+
+    try {
+      const result = await container.chatService.askQuestion({
+        videoId,
+        question: body.question,
+      });
+
+      return reply.status(200).send(result);
+    } catch (error) {
+      console.error("VIDEO CHAT ERROR:", error);
+
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (message.startsWith("Video not found")) {
+        return reply.status(404).send({
+          error: message,
+        });
+      }
+
+      if (message.startsWith("Transcript not found")) {
+        return reply.status(404).send({
+          error: message,
+        });
+      }
+
+      if (message.startsWith("Video is not ready")) {
+        return reply.status(409).send({
+          error: message,
+        });
+      }
+
+      return reply.status(500).send({
+        error: "Failed to answer video question",
+      });
     }
   });
 }
