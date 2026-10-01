@@ -170,12 +170,38 @@ export default function Home() {
 
       const uploadedVideo = (await response.json()) as Video;
       setVideo(uploadedVideo);
-      await loadSessions(uploadedVideo.id);
+      await waitForVideoProcessing(uploadedVideo.id);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Upload failed");
     } finally {
       setUploading(false);
     }
+  }
+
+  async function waitForVideoProcessing(videoId: string) {
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const response = await fetch(`${API_URL}/videos/${videoId}`, {
+        headers: authHeaders(),
+      });
+
+      if (!response.ok) throw new Error("Could not check video processing status.");
+
+      const nextVideo = (await response.json()) as Video;
+      setVideo((current) => (current?.id === nextVideo.id ? nextVideo : current));
+
+      if (nextVideo.status === "ready") {
+        await loadSessions(nextVideo.id);
+        return;
+      }
+
+      if (nextVideo.status === "failed") {
+        throw new Error("Video processing failed. Please try uploading it again.");
+      }
+    }
+
+    throw new Error("Video processing timed out. Check the API logs for details.");
   }
 
   async function loadSessions(videoId: string) {

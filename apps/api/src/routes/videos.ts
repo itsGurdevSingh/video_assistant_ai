@@ -68,17 +68,33 @@ export async function videoRoutes(
         title: file.filename,
       });
 
-      await container.videoProcessingService.processVideo(video.id);
+      void container.videoProcessingService.processVideo(video.id).catch(
+        (error) => {
+          console.error("VIDEO PROCESSING ERROR:", error);
+        },
+      );
 
-      const processedVideo = await container.videoService.findById(video.id);
-
-      return reply.status(201).send(processedVideo);
+      return reply.status(202).send(video);
     } catch (error) {
       console.error("VIDEO UPLOAD ERROR:", error);
       await container.storage.delete(storageKey).catch(() => {});
 
       throw error;
     }
+  });
+
+  app.get("/videos/:videoId", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply, container);
+    if (!user) return;
+
+    const { videoId } = request.params as { videoId: string };
+    const video = await container.videoService.findByIdForUser(videoId, user.id);
+
+    if (!video) {
+      return reply.status(404).send({ error: "Video not found" });
+    }
+
+    return reply.status(200).send(video);
   });
 
   app.post("/videos/:videoId/chat/sessions", async (request, reply) => {
