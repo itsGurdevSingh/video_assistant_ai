@@ -274,7 +274,9 @@ h2 {
 }
 .library-heading > span {
   color: var(--muted);
-  font: 11px Arial, sans-serif;
+  font:
+    11px Arial,
+    sans-serif;
 }
 .library-list {
   display: grid;
@@ -311,7 +313,9 @@ h2 {
 }
 .library-item-copy small {
   color: var(--muted);
-  font: 10px Arial, sans-serif;
+  font:
+    10px Arial,
+    sans-serif;
 }
 .upload-icon {
   display: grid;

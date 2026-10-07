@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { AppContainer } from "../container.js";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { getAuthenticatedUser } from "./auth.js";
 
@@ -15,7 +17,9 @@ export async function videoRoutes(
     const user = await requireAuthenticatedUser(request, reply, container);
     if (!user) return;
 
-    return reply.status(200).send(await container.videoService.listByUser(user.id));
+    return reply
+      .status(200)
+      .send(await container.videoService.listByUser(user.id));
   });
 
   app.post("/videos", async (request, reply) => {
@@ -99,6 +103,33 @@ export async function videoRoutes(
     }
 
     return reply.status(200).send(video);
+  });
+
+  app.get("/videos/:videoId/file", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply, container);
+    if (!user) return;
+
+    const { videoId } = request.params as { videoId: string };
+    const video = await container.videoService.findByIdForUser(
+      videoId,
+      user.id,
+    );
+
+    if (!video?.storageKey) {
+      return reply.status(404).send({ error: "Video file not found" });
+    }
+
+    const filePath = container.storage.getPath(video.storageKey);
+
+    try {
+      await stat(filePath);
+    } catch {
+      return reply.status(404).send({ error: "Video file not found" });
+    }
+
+    return reply
+      .type(getVideoMimeType(video.storageKey))
+      .send(createReadStream(filePath));
   });
 
   app.post("/videos/:videoId/chat/sessions", async (request, reply) => {
@@ -375,4 +406,21 @@ function getExtension(filename: string, mimetype: string): string {
   }
 
   return ".video";
+}
+
+function getVideoMimeType(storageKey: string): string {
+  switch (path.extname(storageKey).toLowerCase()) {
+    case ".mp4":
+      return "video/mp4";
+    case ".webm":
+      return "video/webm";
+    case ".mov":
+      return "video/quicktime";
+    case ".mkv":
+      return "video/x-matroska";
+    case ".avi":
+      return "video/x-msvideo";
+    default:
+      return "application/octet-stream";
+  }
 }

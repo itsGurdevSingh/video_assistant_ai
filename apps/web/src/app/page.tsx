@@ -169,11 +169,26 @@ export default function Home() {
         await waitForVideoProcessing(nextVideo.id);
       } catch (processingError) {
         setError(processingError instanceof Error ? processingError.message : "Video processing failed");
+        return;
       }
-      return;
     }
 
+    await loadPreview(nextVideo.id);
     await loadSessions(nextVideo.id);
+  }
+
+  async function loadPreview(videoId: string) {
+    const response = await fetch(`${API_URL}/videos/${videoId}/file`, {
+      headers: authHeaders(),
+    });
+
+    if (!response.ok) throw new Error("Could not load the video preview.");
+
+    const nextPreviewUrl = URL.createObjectURL(await response.blob());
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return nextPreviewUrl;
+    });
   }
 
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
