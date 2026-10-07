@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 type Video = {
   id: string;
@@ -262,7 +263,10 @@ export default function Home() {
     const response = await fetch(`${API_URL}/videos/${videoId}/chat/sessions`, {
       headers: authHeaders(),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      setError(await getResponseError(response, "Could not load conversations."));
+      return;
+    }
 
     const nextSessions = (await response.json()) as Session[];
     setSessions(nextSessions);
@@ -333,13 +337,17 @@ export default function Home() {
         `${API_URL}/videos/${video.id}/chat/sessions/${activeSessionId}/messages/stream`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders() },
+          headers: {
+            Accept: "text/event-stream",
+            "Content-Type": "application/json",
+            ...authHeaders(),
+          },
           body: JSON.stringify({ question: text }),
         },
       );
 
       if (!response.ok || !response.body) {
-        throw new Error("The chat service could not be reached.");
+        throw new Error(await getResponseError(response, "The chat service could not be reached."));
       }
 
       const reader = response.body.getReader();
@@ -492,7 +500,7 @@ export default function Home() {
               ))}
               {!sessions.length && <p className="empty-copy">Create a conversation to start asking questions.</p>}
             </div>
-            <button className="change-video" onClick={() => { setVideo(null); setSessions([]); setPreviewUrl(null); }}>Change video</button>
+            <button className="change-video" onClick={() => { setVideo(null); setSessions([]); setActiveSessionId(null); setMessages([]); setPreviewUrl(null); setError(null); }}>Change video</button>
           </aside>
 
           <section className="video-column">
@@ -511,7 +519,9 @@ export default function Home() {
               {messages.map((message, index) => (
                 <article key={`${message.role}-${index}`} className={`message ${message.role}`}>
                   <span className="message-role">{message.role === "user" ? "You" : "Assistant"}</span>
-                  <p>{message.content || (streaming && index === messages.length - 1 ? "Thinking..." : "")}</p>
+                  {message.role === "assistant" ? (
+                    message.content ? <ReactMarkdown>{message.content}</ReactMarkdown> : streaming && index === messages.length - 1 ? <div className="thinking-indicator" aria-label="Assistant is thinking"><span /><span /><span /></div> : null
+                  ) : <p>{message.content}</p>}
                   {message.sources?.length ? <div className="sources"><span>Sources</span>{message.sources.map((source) => <button key={source.chunkIndex} onClick={() => seekTo(source.startSeconds)}>{formatTime(source.startSeconds)}</button>)}</div> : null}
                 </article>
               ))}
@@ -531,4 +541,13 @@ function formatTime(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   const remainder = Math.floor(seconds % 60).toString().padStart(2, "0");
   return `${minutes}:${remainder}`;
+}
+
+async function getResponseError(response: Response, fallback: string) {
+  try {
+    const body = (await response.json()) as { error?: string };
+    return body.error ? `${body.error} (${response.status})` : `${fallback} (${response.status})`;
+  } catch {
+    return `${fallback} (${response.status})`;
+  }
 }

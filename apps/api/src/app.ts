@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 
 import { db, pool } from "@video-assistant/db";
@@ -15,6 +16,10 @@ export async function buildApp() {
   });
 
   // Register plugins and routes
+  await app.register(cors, {
+    origin: process.env.WEB_ORIGIN ?? "http://localhost:3000",
+  });
+
   await app.register(multipart, {
     limits: {
       fileSize: 500 * 1024 * 1024,
