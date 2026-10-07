@@ -36,6 +36,10 @@ export function createVideoService(db: Database) {
       return video;
     },
 
+    async listByUser(userId: string) {
+      return videoRepository.listByUser(userId);
+    },
+
     async claimNextQueued() {
       return videoRepository.claimNextQueued();
     },

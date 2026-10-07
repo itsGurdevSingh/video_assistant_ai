@@ -11,6 +11,13 @@ export async function videoRoutes(
 ) {
   const { container } = options;
 
+  app.get("/videos", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply, container);
+    if (!user) return;
+
+    return reply.status(200).send(await container.videoService.listByUser(user.id));
+  });
+
   app.post("/videos", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply, container);
     if (!user) return;

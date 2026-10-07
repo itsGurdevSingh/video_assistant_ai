@@ -7,6 +7,7 @@ type Video = {
   title?: string | null;
   status: string;
   durationSeconds?: number | null;
+  createdAt?: string;
 };
 
 type User = {
@@ -42,6 +43,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export default function Home() {
   const [video, setVideo] = useState<Video | null>(null);
+  const [videos, setVideos] = useState<Video[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
@@ -81,6 +83,7 @@ export default function Home() {
         const result = (await response.json()) as { user: User };
         setAuthToken(storedToken);
         setUser(result.user);
+        await loadVideos(storedToken);
       })
       .catch(() => window.localStorage.removeItem("video-assistant-token"))
       .finally(() => setAuthLoading(false));
@@ -111,6 +114,7 @@ export default function Home() {
       setAuthToken(result.token);
       setUser(result.user);
       setAuthPassword("");
+      await loadVideos(result.token);
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Authentication failed");
     } finally {
@@ -133,11 +137,43 @@ export default function Home() {
     setAuthToken(null);
     setUser(null);
     setVideo(null);
+    setVideos([]);
     setMessages([]);
   }
 
   function authHeaders(): Record<string, string> {
     return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  }
+
+  async function loadVideos(token = authToken) {
+    if (!token) return;
+
+    const response = await fetch(`${API_URL}/videos`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) throw new Error("Could not load your video library.");
+    setVideos((await response.json()) as Video[]);
+  }
+
+  async function openVideo(nextVideo: Video) {
+    setError(null);
+    setVideo(nextVideo);
+    setPreviewUrl(null);
+    setSessions([]);
+    setActiveSessionId(null);
+    setMessages([]);
+
+    if (nextVideo.status !== "ready") {
+      try {
+        await waitForVideoProcessing(nextVideo.id);
+      } catch (processingError) {
+        setError(processingError instanceof Error ? processingError.message : "Video processing failed");
+      }
+      return;
+    }
+
+    await loadSessions(nextVideo.id);
   }
 
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -169,8 +205,10 @@ export default function Home() {
       }
 
       const uploadedVideo = (await response.json()) as Video;
+      setVideos((current) => [uploadedVideo, ...current]);
       setVideo(uploadedVideo);
       await waitForVideoProcessing(uploadedVideo.id);
+      await loadVideos();
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Upload failed");
     } finally {
@@ -192,6 +230,7 @@ export default function Home() {
       setVideo((current) => (current?.id === nextVideo.id ? nextVideo : current));
 
       if (nextVideo.status === "ready") {
+        setVideos((current) => current.map((currentVideo) => currentVideo.id === nextVideo.id ? nextVideo : currentVideo));
         await loadSessions(nextVideo.id);
         return;
       }
@@ -405,6 +444,16 @@ export default function Home() {
             <span>{uploading ? "Audio, transcript, and embeddings are being prepared" : "MP4, MOV, MKV, WEBM, or AVI"}</span>
             <input ref={fileInputRef} type="file" accept="video/*,.mkv" onChange={handleUpload} hidden />
           </button>
+          {videos.length > 0 && <div className="video-library">
+            <div className="library-heading"><p className="eyebrow">Your library</p><span>{videos.length} video{videos.length === 1 ? "" : "s"}</span></div>
+            <div className="library-list">
+              {videos.map((libraryVideo) => <button key={libraryVideo.id} className="library-item" onClick={() => void openVideo(libraryVideo)}>
+                <span className="video-badge">VIDEO</span>
+                <span className="library-item-copy"><strong>{libraryVideo.title ?? "Untitled video"}</strong><small>{new Date(libraryVideo.createdAt ?? "").toLocaleDateString()}</small></span>
+                <span className={`processing-label ${libraryVideo.status}`}>{libraryVideo.status}</span>
+              </button>)}
+            </div>
+          </div>}
           {error && <p className="error-message">{error}</p>}
         </section>
       ) : (

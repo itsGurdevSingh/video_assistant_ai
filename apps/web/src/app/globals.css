@@ -261,6 +261,58 @@ h2 {
   transform: translateY(-4px);
   border-color: var(--teal);
 }
+.video-library {
+  grid-column: 1 / -1;
+  width: min(100%, 1120px);
+  margin-top: 8px;
+}
+.library-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.library-heading > span {
+  color: var(--muted);
+  font: 11px Arial, sans-serif;
+}
+.library-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+.library-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(251, 252, 249, 0.78);
+  color: var(--ink);
+  text-align: left;
+}
+.library-item:hover {
+  border-color: var(--teal);
+}
+.library-item-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+.library-item-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+}
+.library-item-copy small {
+  color: var(--muted);
+  font: 10px Arial, sans-serif;
+}
 .upload-icon {
   display: grid;
   place-items: center;
