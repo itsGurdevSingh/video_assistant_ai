@@ -24,9 +24,11 @@ while (!stopping) {
 
   console.log(`Processing video ${video.id}`);
 
-  await container.videoProcessingService.processVideo(video.id).catch((error) => {
-    console.error(`Failed to process video ${video.id}:`, error);
-  });
+  await container.videoProcessingService
+    .processVideo(video.id)
+    .catch((error) => {
+      console.error(`Failed to process video ${video.id}:`, error);
+    });
 }
 
 console.log("Video worker stopped");

@@ -1,42 +1,42 @@
-  import { eq, InferSelectModel, sql } from "drizzle-orm";
+import { eq, InferSelectModel, sql } from "drizzle-orm";
 
-  import type { Database } from "../client.js";
-  import { videos } from "../schema.js";
-  import type { VideoStatus } from "../schema.js";
+import type { Database } from "../client.js";
+import { videos } from "../schema.js";
+import type { VideoStatus } from "../schema.js";
 
-  export type CreateVideoInput = {
-    userId: string;
-    sourceType: "upload" | "remote_url";
-    sourceUrl?: string;
-    storageKey?: string;
-    title?: string;
-    durationSeconds?: number;
-  };
+export type CreateVideoInput = {
+  userId: string;
+  sourceType: "upload" | "remote_url";
+  sourceUrl?: string;
+  storageKey?: string;
+  title?: string;
+  durationSeconds?: number;
+};
 
-  export function createVideoRepository(db: Database) {
-    return {
-      async create(input: CreateVideoInput) {
-        const result = await db.insert(videos).values(input).returning();
+export function createVideoRepository(db: Database) {
+  return {
+    async create(input: CreateVideoInput) {
+      const result = await db.insert(videos).values(input).returning();
 
-        return result[0];
-      },
+      return result[0];
+    },
 
-      async findById(id: string) {
-        const result = await db
-          .select()
-          .from(videos)
-          .where(eq(videos.id, id))
-          .limit(1);
+    async findById(id: string) {
+      const result = await db
+        .select()
+        .from(videos)
+        .where(eq(videos.id, id))
+        .limit(1);
 
-        return result[0] ?? null;
-      },
+      return result[0] ?? null;
+    },
 
-      async listByUser(userId: string) {
-        return db.select().from(videos).where(eq(videos.userId, userId));
-      },
+    async listByUser(userId: string) {
+      return db.select().from(videos).where(eq(videos.userId, userId));
+    },
 
-      async claimNextQueued() {
-        const result = await db.execute(sql`
+    async claimNextQueued() {
+      const result = await db.execute(sql`
           WITH candidate AS (
             SELECT id
             FROM videos
@@ -58,21 +58,21 @@
           RETURNING videos.*
         `);
 
-        return result.rows[0] as InferSelectModel<typeof videos> | undefined;
-      },
+      return result.rows[0] as InferSelectModel<typeof videos> | undefined;
+    },
 
-      async updateStatus(id: string, status: VideoStatus, errorMessage?: string) {
-        const result = await db
-          .update(videos)
-          .set({
-            status,
-            errorMessage: errorMessage ?? null,
-            updatedAt: new Date(),
-          })
-          .where(eq(videos.id, id))
-          .returning();
+    async updateStatus(id: string, status: VideoStatus, errorMessage?: string) {
+      const result = await db
+        .update(videos)
+        .set({
+          status,
+          errorMessage: errorMessage ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(videos.id, id))
+        .returning();
 
-        return result[0] ?? null;
-      },
-    };
-  }
+      return result[0] ?? null;
+    },
+  };
+}
