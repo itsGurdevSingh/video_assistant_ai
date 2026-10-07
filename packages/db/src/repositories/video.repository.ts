@@ -1,4 +1,4 @@
-  import { eq, InferSelectModel } from "drizzle-orm";
+  import { eq, InferSelectModel, sql } from "drizzle-orm";
 
   import type { Database } from "../client.js";
   import { videos } from "../schema.js";
@@ -33,6 +33,32 @@
 
       async listByUser(userId: string) {
         return db.select().from(videos).where(eq(videos.userId, userId));
+      },
+
+      async claimNextQueued() {
+        const result = await db.execute(sql`
+          WITH candidate AS (
+            SELECT id
+            FROM videos
+            WHERE status = 'queued'
+               OR (
+                 status = 'downloading'
+                 AND updated_at < now() - interval '5 minutes'
+               )
+            ORDER BY created_at
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          )
+          UPDATE videos
+          SET status = 'downloading',
+              error_message = NULL,
+              updated_at = now()
+          FROM candidate
+          WHERE videos.id = candidate.id
+          RETURNING videos.*
+        `);
+
+        return result.rows[0] as InferSelectModel<typeof videos> | undefined;
       },
 
       async updateStatus(id: string, status: VideoStatus, errorMessage?: string) {

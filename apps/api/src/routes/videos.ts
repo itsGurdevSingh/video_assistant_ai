@@ -68,12 +68,6 @@ export async function videoRoutes(
         title: file.filename,
       });
 
-      void container.videoProcessingService.processVideo(video.id).catch(
-        (error) => {
-          console.error("VIDEO PROCESSING ERROR:", error);
-        },
-      );
-
       return reply.status(202).send(video);
     } catch (error) {
       console.error("VIDEO UPLOAD ERROR:", error);
@@ -88,7 +82,10 @@ export async function videoRoutes(
     if (!user) return;
 
     const { videoId } = request.params as { videoId: string };
-    const video = await container.videoService.findByIdForUser(videoId, user.id);
+    const video = await container.videoService.findByIdForUser(
+      videoId,
+      user.id,
+    );
 
     if (!video) {
       return reply.status(404).send({ error: "Video not found" });

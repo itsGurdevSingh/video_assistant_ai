@@ -35,5 +35,9 @@ export function createVideoService(db: Database) {
       if (!video || video.userId !== userId) return null;
       return video;
     },
+
+    async claimNextQueued() {
+      return videoRepository.claimNextQueued();
+    },
   };
 }
